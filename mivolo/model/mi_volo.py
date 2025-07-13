@@ -3,6 +3,7 @@ from typing import Optional
 
 import numpy as np
 import torch
+import math
 from mivolo.data.misc import prepare_classification_images
 from mivolo.model.create_timm_model import create_model
 from mivolo.structures import PersonAndFaceCrops, PersonAndFaceResult
@@ -202,7 +203,8 @@ class MiVOLO:
                 gender = "male" if gender_indx[index].item() == 0 else "female"
                 gender_score = gender_probs[index].item()
 
-                _logger.info(f"\tgender: {gender} [{int(gender_score * 100)}%]")
+                score_display = f"{int(gender_score * 100)}%" if not math.isnan(gender_score) else "N/A"
+                _logger.info(f"\tgender: {gender} [{score_display}]")
 
                 detected_bboxes.set_gender(face_ind, gender, gender_score)
                 detected_bboxes.set_gender(body_ind, gender, gender_score)

@@ -11,10 +11,10 @@ from mivolo.structures import AGE_GENDER_TYPE, PersonAndFaceResult
 import huggingface_hub
 
 class Predictor:
-    def __init__(self, conf_threshold: float = 0.4, iou_threshold: float = 0.7, verbose: bool = False):
+    def __init__(self, conf_threshold: float = 0.4, iou_threshold: float = 0.7, verbose: bool = False,
+                  device: str = "cuda"):
         detector_weights = huggingface_hub.hf_hub_download('Ayah-kh/Mivolo-models', 'yolov8x_person_face.pt')
         checkpoint = huggingface_hub.hf_hub_download('Ayah-kh/Mivolo-models', 'mivolo_imbd.pth.tar')
-        device = "cuda"
         use_persons = True
         disable_faces = False
         draw = True
