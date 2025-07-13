@@ -257,9 +257,11 @@ class PersonAndFaceResult:
             tracked_objects (dict[int, list[AGE_GENDER_TYPE]]): info about tracked objects by guid
         """
 
+        face_to_person_map_history_ids: Dict[int,  Optional[int]] = {}
         for face_ind, person_ind in self.face_to_person_map.items():
             pguid = self._get_id_by_ind(person_ind)
             fguid = self._get_id_by_ind(face_ind)
+            face_to_person_map_history_ids[int(fguid)] = int(pguid)
 
             if fguid == -1 and pguid == -1:
                 # YOLO might not assign ids for some objects in some cases:
@@ -283,6 +285,7 @@ class PersonAndFaceResult:
                 continue
             self.set_gender(person_ind, gender, 1.0)
             self.set_age(person_ind, age)
+        return face_to_person_map_history_ids
 
     def _get_id_by_ind(self, ind: Optional[int] = None) -> int:
         if ind is None:

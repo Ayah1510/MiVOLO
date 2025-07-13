@@ -1,5 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch
+torchvision
+torchaudio
+
 huggingface_hub
-ultralytics==8.1.0
+ultralytics
 timm==0.8.13.dev0
 yt_dlp
 lapx>=0.5.2
