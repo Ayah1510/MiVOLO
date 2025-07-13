@@ -8,22 +8,28 @@ import tqdm
 from mivolo.model.mi_volo import MiVOLO
 from mivolo.model.yolo_detector import Detector
 from mivolo.structures import AGE_GENDER_TYPE, PersonAndFaceResult
-
-
+import huggingface_hub
 
 class Predictor:
-    def __init__(self, config, verbose: bool = False):
-        self.detector = Detector(config.detector_weights, config.device, verbose=verbose)
-        print(f"Detector initialized with weights: {config.detector_weights}")
+    def __init__(self, conf_threshold: float = 0.4, iou_threshold: float = 0.7, verbose: bool = False):
+        detector_weights = huggingface_hub.hf_hub_download('Ayah-kh/Mivolo-models', 'yolov8x_person_face.pt')
+        checkpoint = huggingface_hub.hf_hub_download('Ayah-kh/Mivolo-models', 'mivolo_imbd.pth.tar')
+        device = "cuda"
+        use_persons = True
+        disable_faces = False
+        draw = True
+        self.detector = Detector(detector_weights, device, verbose=verbose,
+                                 conf_thresh=conf_threshold, iou_thresh=iou_threshold)
+        print(f"Detector initialized with weights: {detector_weights}")
         self.age_gender_model = MiVOLO(
-            config.checkpoint,
-            config.device,
+            checkpoint,
+            device,
             half=True,
-            use_persons=config.with_persons,
-            disable_faces=config.disable_faces,
+            use_persons=use_persons,
+            disable_faces=disable_faces,
             verbose=verbose,
         )
-        self.draw = config.draw
+        self.draw = draw
 
     def recognize(self, image: np.ndarray) -> Tuple[PersonAndFaceResult, Optional[np.ndarray]]:
         detected_objects: PersonAndFaceResult = self.detector.predict(image)
