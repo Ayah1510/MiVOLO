@@ -363,7 +363,7 @@ class PersonAndFaceResult:
         names = self.yolo_results.names
         pred_boxes = self.yolo_results.boxes
         for _, (det, age, gender, _) in enumerate(zip(pred_boxes, self.ages, self.genders, self.gender_scores)):
-            if det.id is None:
+            if det.id is None or math.isnan(age) or gender is None:
                 continue
             cat_id, _, guid = int(det.cls), float(det.conf), int(det.id.item())
             name = names[cat_id]
