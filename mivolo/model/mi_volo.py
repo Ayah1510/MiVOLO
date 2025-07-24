@@ -3,11 +3,11 @@ from typing import Optional
 
 import numpy as np
 import torch
-import math
 from mivolo.data.misc import prepare_classification_images
 from mivolo.model.create_timm_model import create_model
 from mivolo.structures import PersonAndFaceCrops, PersonAndFaceResult
 from timm.data import resolve_data_config
+import math
 
 _logger = logging.getLogger("MiVOLO")
 has_compile = hasattr(torch, "compile")
@@ -160,7 +160,7 @@ class MiVOLO:
 
         faces_input, person_input, faces_inds, bodies_inds = self.prepare_crops(image, detected_bboxes)
 
-        if faces_input is None and person_input is None:
+        if person_input is None:
             # nothing to process
             return
 
@@ -182,7 +182,7 @@ class MiVOLO:
             gender_output = output[:, :2].softmax(-1)
             gender_probs, gender_indx = gender_output.topk(1)
 
-        assert output.shape[0] == len(faces_inds) == len(bodies_inds)
+        assert output.shape[0] == len(bodies_inds)
 
         # per face
         for index in range(output.shape[0]):
@@ -206,7 +206,6 @@ class MiVOLO:
                 score_display = f"{int(gender_score * 100)}%" if not math.isnan(gender_score) else "N/A"
                 _logger.info(f"\tgender: {gender} [{score_display}]")
 
-                detected_bboxes.set_gender(face_ind, gender, gender_score)
                 detected_bboxes.set_gender(body_ind, gender, gender_score)
 
     def prepare_crops(self, image: np.ndarray, detected_bboxes: PersonAndFaceResult):
@@ -234,7 +233,6 @@ class MiVOLO:
         )
 
         _logger.info(
-            f"faces_input: {faces_input.shape if faces_input is not None else None}, "
             f"person_input: {person_input.shape if person_input is not None else None}"
         )
 

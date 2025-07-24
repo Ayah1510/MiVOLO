@@ -1,9 +1,8 @@
-from collections import defaultdict, Counter
+from collections import defaultdict
 from typing import Dict, Generator, List, Optional, Tuple
 
 import cv2
 import numpy as np
-import math
 import tqdm
 from mivolo.model.mi_volo import MiVOLO
 from mivolo.model.yolo_detector import Detector
@@ -13,11 +12,12 @@ import huggingface_hub
 class Predictor:
     def __init__(self, conf_threshold: float = 0.4, iou_threshold: float = 0.7, verbose: bool = False,
                   device: str = "cuda"):
-        detector_weights = huggingface_hub.hf_hub_download('Ayah-kh/Mivolo-models', 'yolov8x_person_face.pt')
+        detector_weights = huggingface_hub.hf_hub_download('Ultralytics/YOLOv8', 'yolov8n.pt')
+        #detector_weights = huggingface_hub.hf_hub_download('Ayah-kh/Mivolo-models', 'yolov8x_person_face.pt')
         checkpoint = huggingface_hub.hf_hub_download('Ayah-kh/Mivolo-models', 'mivolo_imbd.pth.tar')
         use_persons = True
         disable_faces = False
-        draw = True
+        draw = False
         self.detector = Detector(detector_weights, device, verbose=verbose,
                                  conf_thresh=conf_threshold, iou_thresh=iou_threshold)
         print(f"Detector initialized with weights: {detector_weights}")
@@ -52,7 +52,6 @@ class Predictor:
             raise ValueError(f"Failed to open video source {source}")
 
         detected_objects_history: Dict[int, List[AGE_GENDER_TYPE]] = defaultdict(list)
-        face_to_person_map_history: Dict[int,  Optional[int]] = {}
 
         frame_idx = 0
         total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -71,80 +70,47 @@ class Predictor:
             self.age_gender_model.predict(frame, detected_objects)
 
             current_frame_objs = detected_objects.get_results_for_tracking()
-            cur_persons: Dict[int, AGE_GENDER_TYPE] = current_frame_objs[0]
-            cur_faces: Dict[int, AGE_GENDER_TYPE] = current_frame_objs[1]
+            cur_persons: Dict[int, AGE_GENDER_TYPE] = current_frame_objs
 
-            # add tr_persons and tr_faces to history
+            # add tr_persons to history
             for guid, data in cur_persons.items():
                 # not useful for tracking :)
                 if None not in data:
                     detected_objects_history[guid].append(data)
-            for guid, data in cur_faces.items():
-                if None not in data:
-                    detected_objects_history[guid].append(data)
 
-            updated_mapping = detected_objects.set_tracked_age_gender(detected_objects_history)
-            face_to_person_map_history.update(updated_mapping )
             if self.draw:
                 frame = detected_objects.plot()
-            yield detected_objects_history, face_to_person_map_history, frame
-
+            yield detected_objects_history, frame
 
     @staticmethod
-    def summarize_person_detections(
-        face_to_person_map_history_ids: Dict[int, Optional[int]],
+    def summarize(
         detected_objects_history: Dict[int, List[Tuple[float, str]]]
     ) -> Dict[int, Dict[str, object]]:
         """
-        Summarizes age and gender predictions for each person based on associated face detections
-        and their direct person ID entries in the detection history.
-
-        Parameters:
-        - face_to_person_map_history_ids: Maps face IDs to person IDs
-        - detected_objects_history: Maps face or person IDs to lists of (age, gender) predictions
-
-        Returns:
-        - Dictionary mapping person ID to a summary with average age, majority gender, and face IDs
+        Summarizes
         """
+        id_stats = {}
 
-        # Build mapping: person_id → face_ids
-        person_to_face_ids = defaultdict(set)
-        for face_id, person_id in face_to_person_map_history_ids.items():
-            if person_id is not None:
-                person_to_face_ids[person_id].add(face_id)
+        for track_id, records in detected_objects_history.items():
+            ages = [age for age, _ in records]
+            genders = [gender for _, gender in records]
 
-        # Gather detections only for persons who have face IDs
-        person_to_ages_genders = defaultdict(list)
+            avg_age = sum(ages) / len(ages)
+            male_count = sum(1 for g in genders if g.lower() == 'male')
+            female_count = sum(1 for g in genders if g.lower() == 'female')
+            total = len(genders)
+            male_ratio = male_count / total if total > 0 else 0
+            final_gender = 'male' if male_count > female_count else 'female'
 
-        for person_id, face_ids in person_to_face_ids.items():
-            # 1. Get detections from face IDs
-            for face_id in face_ids:
-                for age, gender in detected_objects_history.get(face_id, []):
-                    if not math.isnan(age):
-                        person_to_ages_genders[person_id].append((age, gender))
-
-            # 2. Include data from the person ID directly
-            for age, gender in detected_objects_history.get(person_id, []):
-                if not math.isnan(age):
-                    person_to_ages_genders[person_id].append((age, gender))
-
-        # Calculate age and gender per person
-        summary = {}
-
-        for person_id, entries in person_to_ages_genders.items():
-            if not entries:
-                continue
-
-            ages = [age for age, _ in entries]
-            genders = [gender for _, gender in entries]
-
-            avg_age = round(np.mean(ages), 2) if ages else None
-            majority_gender = Counter(genders).most_common(1)[0][0] if genders else None
-
-            summary[person_id] = {
-                "avg_age": avg_age,
-                "majority_gender": majority_gender,
-                "face_ids": list(person_to_face_ids[person_id])
+            id_stats[track_id] = {
+                'avg_age': round(avg_age, 2),
+                'male_ratio': round(male_ratio, 2),  # 1.0 means 100% male, 0.5 = equal
+                'final_gender': final_gender,
+                'male_count': male_count,
+                'female_count': female_count,
             }
 
-        return summary
+        # Print nicely
+        for tid, stats in id_stats.items():
+            print(f"ID {tid}: Avg Age = {stats['avg_age']} | Gender = {stats['final_gender']} "
+      f"({stats['male_count']}M/{stats['female_count']}F)")

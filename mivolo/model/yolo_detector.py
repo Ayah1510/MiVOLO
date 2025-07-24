@@ -42,5 +42,5 @@ class Detector:
         return PersonAndFaceResult(results)
 
     def track(self, image: Union[np.ndarray, str, "PIL.Image"]) -> PersonAndFaceResult:
-        results: Results = self.yolo.track(image, persist=True, **self.detector_kwargs)[0]
+        results: Results = self.yolo.track(image, persist=True, classes=[0], **self.detector_kwargs)[0]
         return PersonAndFaceResult(results)
