@@ -27,6 +27,6 @@ class AgeGenderPredictor:
         self.age_gender_model.predict(frame, detected_objects)
 
         current_frame_objs = detected_objects.get_results_for_tracking()
-        cur_persons: Dict[int, AGE_GENDER_TYPE] = current_frame_objs
+        age_gender_list = list(current_frame_objs.values())
 
-        return cur_persons
+        return age_gender_list
