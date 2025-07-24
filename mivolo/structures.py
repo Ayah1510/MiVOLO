@@ -128,8 +128,9 @@ class PersonAndFaceCrops:
 class PersonAndFaceResult:
     def __init__(self, boxes: np.ndarray):
 
-        self.boxes = boxes.boxes
+        self.boxes = boxes
         self.names = {0: 'person'}
+        self.cls = 0
 
         # initially no faces and persons are associated to each other
         self.face_to_person_map: Dict[int, Optional[int]] = {ind: None for ind in self.get_bboxes_inds("face")}
@@ -153,8 +154,8 @@ class PersonAndFaceResult:
 
     def get_bboxes_inds(self, category: str) -> List[int]:
         bboxes: List[int] = []
-        for ind, det in enumerate(self.boxes):
-            name = self.names[int(det.cls)]
+        for ind, _ in enumerate(self.boxes):
+            name = self.names[int(self.cls)]
             if name == category:
                 bboxes.append(ind)
 
@@ -232,16 +233,16 @@ class PersonAndFaceResult:
             for bb_ind, (d, age, gender, gender_score) in enumerate(
                 zip(pred_boxes, self.ages, self.genders, self.gender_scores)
             ):
-                c, conf, guid = int(d.cls), float(d.conf) if conf else None, None if d.id is None else int(d.id.item())
+                c, guid = int(self.cls), None if d.id is None else int(d.id.item())
                 name = ("" if guid is None else f"id:{guid} ") + names[c]
-                label = (f"{name} {conf:.2f}" if conf else name) if labels else None
+                label = name if labels else None
                 if ages and age is not None:
                     label += f" {age:.1f}"
                 if genders and gender is not None:
                     label += f" {'F' if gender == 'female' else 'M'}"
                 if gender_probs and gender_score is not None:
                     label += f" ({gender_score:.1f})"
-                annotator.box_label(d.xyxy.squeeze(), label, color=colors(colors_by_ind[bb_ind], True))
+                annotator.box_label(d.squeeze(), label, color=colors(colors_by_ind[bb_ind], True))
 
         """
         if pred_probs is not None and show_probs:
@@ -294,7 +295,7 @@ class PersonAndFaceResult:
         return obj_id.item()
 
     def get_bbox_by_ind(self, ind: int, im_h: int = None, im_w: int = None) -> torch.tensor:
-        bb = self.boxes[ind].xyxy.squeeze().type(torch.int32)
+        bb = self.boxes[ind].squeeze().type(torch.int32)
         if im_h is not None and im_w is not None:
             bb[0] = torch.clamp(bb[0], min=0, max=im_w - 1)
             bb[1] = torch.clamp(bb[1], min=0, max=im_h - 1)
@@ -357,15 +358,11 @@ class PersonAndFaceResult:
         """
         persons: Dict[int, AGE_GENDER_TYPE] = {}
 
-        names = self.names
         pred_boxes = self.boxes
-        for _, (det, age, gender, _) in enumerate(zip(pred_boxes, self.ages, self.genders, self.gender_scores)):
-            if det.id is None or age is None or math.isnan(age) or gender is None:
+        for ind, (_, age, gender, _) in enumerate(zip(pred_boxes, self.ages, self.genders, self.gender_scores)):
+            if age is None or math.isnan(age) or gender is None:
                 continue
-            cat_id, _, guid = int(det.cls), float(det.conf), int(det.id.item())
-            name = names[cat_id]
-            if name == "person":
-                persons[guid] = (age, gender)
+            persons[ind] = (age, gender)
 
         return persons
 
@@ -397,12 +394,11 @@ class PersonAndFaceResult:
 
         obj_bbox = self.get_bbox_by_ind(ind, *full_image.shape[:2])
         x1, y1, x2, y2 = obj_bbox
-        cur_cat = self.names[int(self.boxes[ind].cls)]
         # get crop of face or person
         obj_image = full_image[y1:y2, x1:x2].copy()
         crop_h, crop_w = obj_image.shape[:2]
 
-        if cur_cat == "person" and (crop_h < MIN_PERSON_SIZE or crop_w < MIN_PERSON_SIZE):
+        if (crop_h < MIN_PERSON_SIZE or crop_w < MIN_PERSON_SIZE):
             return None
 
         if not cut_other_classes:
@@ -417,10 +413,10 @@ class PersonAndFaceResult:
 
         # cut out other objects in case of intersection
         for other_ind, (det, iou) in enumerate(zip(self.boxes, iou_matrix)):
-            other_cat = self.names[int(det.cls)]
+            other_cat = self.names[int(self.cls)]
             if ind == other_ind or iou < IOU_THRESH or other_cat not in cut_other_classes:
                 continue
-            o_x1, o_y1, o_x2, o_y2 = det.xyxy.squeeze().type(torch.int32)
+            o_x1, o_y1, o_x2, o_y2 = det.squeeze().type(torch.int32)
 
             # remap current_person_bbox to reference_person_bbox coordinates
             o_x1 = max(o_x1 - x1, 0)
